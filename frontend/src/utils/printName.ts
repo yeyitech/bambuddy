@@ -21,3 +21,16 @@ export function formatPrintName(
   }
   return name;
 }
+
+
+// Transport UUIDs are file identity, not a useful project title. Never use fuzzy
+// matching: similarly named versions can be different prints.
+export function resolvePrintDisplayName(
+  raw: string | null | undefined,
+  archives: { filename: string; print_name?: string | null }[] = [],
+): string {
+  if (!raw) return '';
+  const stem = (s: string) => s.replace(/^.*[\\/]/, '').replace(/(?:\.gcode)?\.3mf$/i, '');
+  const exact = archives.find(a => stem(a.filename) === stem(raw) && a.print_name?.trim());
+  return exact?.print_name?.trim() || stem(raw).replace(/^checked-[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}-/i, '');
+}

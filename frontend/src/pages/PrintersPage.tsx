@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } fr
 import { createPortal } from 'react-dom';
 import { compareFwVersions } from '../utils/firmwareVersion';
 import { mapModelCode } from '../utils/printerModel';
-import { formatPrintName } from '../utils/printName';
+import { formatPrintName, resolvePrintDisplayName } from '../utils/printName';
 import { isBedSlinger } from '../utils/bedSlinger';
 import { computePopoverPosition, type PopoverPosition } from '../utils/popoverPosition';
 import {
@@ -2621,8 +2621,14 @@ function PrinterCard({
   // Auto Power Off the printer is powered down exactly when the operator clears the
   // plate. Hiding the control there left no way to release the gate (#2864).
   const showClearPlateButton = needsPlateClear && !isPrintingOrPaused;
+  const { data: namedPrints } = useQuery({
+    queryKey: ['printer-print-names', printer.id],
+    queryFn: () => api.getArchives(printer.id, undefined, 100),
+    enabled: isPrintingOrPaused && (hasPermission('archives:read_all') || hasPermission('archives:read_own')),
+    staleTime: 60000,
+  });
   const activePrintName = status?.current_print && isPrintingOrPaused
-    ? formatPrintName(status.subtask_name || status.current_print || null, status.gcode_file, t, activePlateLabel)
+    ? formatPrintName(resolvePrintDisplayName(status.subtask_name || status.current_print, namedPrints), status.gcode_file, t, activePlateLabel)
     : null;
   const [retainedPrintJob, setRetainedPrintJob] = useState<{ name: string; coverUrl: string | null } | null>(null);
   useEffect(() => {
