@@ -42,6 +42,7 @@ interface NavItem {
 }
 
 export const defaultNavItems: NavItem[] = [
+  { id: 'home-ledger', to: '/home-ledger', icon: Receipt, labelKey: 'nav.homeLedger' },
   { id: 'printers', to: '/', icon: Printer, labelKey: 'nav.printers' },
   { id: 'inventory', to: '/inventory', icon: Disc3, labelKey: 'nav.inventory' },
   { id: 'archives', to: '/archives', icon: Archive, labelKey: 'nav.archives' },

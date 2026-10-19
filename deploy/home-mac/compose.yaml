@@ -1,0 +1,16 @@
+services:
+  bambuddy:
+    image: ${BAMBUDDY_IMAGE:?Set a pinned image}
+    container_name: bambuddy-home
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8130:8000"
+      - "192.168.5.25:8130:8000"
+    volumes:
+      - ${BAMBUDDY_STATE:?Set a private state directory}/data:/app/data
+      - ${BAMBUDDY_STATE}/logs:/app/logs
+    environment:
+      TZ: Asia/Shanghai
+      LOG_LEVEL: INFO
+    cap_add:
+      - NET_BIND_SERVICE

@@ -10621,6 +10621,9 @@ async def trace_id_middleware(request, call_next):
     return response
 
 
+from backend.app.api.routes import home_ledger
+app.include_router(home_ledger.router, prefix=app_settings.api_prefix)
+
 # API routes
 app.include_router(auth.router, prefix=app_settings.api_prefix)
 app.include_router(mfa.router, prefix=app_settings.api_prefix)

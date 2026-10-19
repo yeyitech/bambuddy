@@ -20,6 +20,7 @@ import { StreamOverlayPage } from './pages/StreamOverlayPage';
 import { ExternalLinkPage } from './pages/ExternalLinkPage';
 import { GroupEditPage } from './pages/GroupEditPage';
 import InventoryPage from './pages/InventoryPage';
+import HomeLedgerPage from './pages/HomeLedgerPage';
 import { MakerworldPage } from './pages/MakerworldPage';
 import { SystemInfoPage } from './pages/SystemInfoPage';
 import { LoginPage } from './pages/LoginPage';
@@ -222,6 +223,7 @@ function App() {
                   <Route path="projects" element={<ProjectsPage />} />
                   <Route path="projects/:id" element={<ProjectDetailPage />} />
                   <Route path="inventory" element={<InventoryPage />} />
+                  <Route path="home-ledger" element={<HomeLedgerPage />} />
                   <Route path="files" element={<FileManagerPage />} />
                   <Route path="files/trash" element={<LibraryTrashPage />} />
                   <Route path="makerworld" element={<PermissionRoute permission="makerworld:view"><MakerworldPage /></PermissionRoute>} />

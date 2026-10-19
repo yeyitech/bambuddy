@@ -1,5 +1,6 @@
 export default {
   nav: {
+    homeLedger: 'Household ledger',
     printers: "Принтеры",
     archives: "Архив",
     queue: "Очередь печати",

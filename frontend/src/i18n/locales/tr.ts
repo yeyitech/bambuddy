@@ -1,6 +1,7 @@
 export default {
   // Navigasyon
   nav: {
+    homeLedger: 'Household ledger',
     printers: 'Yazıcılar',
     archives: 'Arşivler',
     queue: 'Baskı Kuyruğu',

@@ -1,6 +1,7 @@
 export default {
   // Navigation
   nav: {
+    homeLedger: 'Household ledger',
     printers: 'Imprimantes',
     archives: 'Archives',
     queue: 'File d\'attente d\'impression',

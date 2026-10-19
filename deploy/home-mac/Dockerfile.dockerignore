@@ -1,0 +1,10 @@
+**
+!backend/
+!backend/app/
+!backend/app/api/
+!backend/app/api/routes/
+!backend/app/api/routes/home_ledger.py
+!backend/app/services/
+!backend/app/services/home_ledger_store.py
+!static/
+!static/**

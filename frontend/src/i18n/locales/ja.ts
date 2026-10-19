@@ -1,6 +1,7 @@
 export default {
   // Navigation
   nav: {
+    homeLedger: 'Household ledger',
     printers: 'プリンター',
     archives: 'アーカイブ',
     queue: '印刷キュー',

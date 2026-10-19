@@ -1,6 +1,7 @@
 export default {
   // Navigation
   nav: {
+    homeLedger: '家庭列印台帳',
     printers: '印表機',
     archives: '歸檔',
     queue: '列印佇列',
