@@ -1,3 +1,4 @@
+import { HomePurchaseSummary } from './HomeLedgerPage';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -982,6 +983,7 @@ function RecordsWidget({ archives, currency }: { archives: ArchiveSlim[]; curren
 }
 
 export function StatsPage() {
+  const { isAdmin: homeAdmin } = useAuth();
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { hasPermission, authEnabled } = useAuth();
@@ -1227,6 +1229,7 @@ export function StatsPage() {
 
   return (
     <div className="p-4 md:p-8">
+      {homeAdmin&&<HomePurchaseSummary />}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2">

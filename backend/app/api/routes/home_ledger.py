@@ -1,10 +1,14 @@
 """Household purchase review; printer operations are deliberately absent."""
 from datetime import date as Date
 from decimal import Decimal
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, ConfigDict, Field
 from backend.app.core.auth import RequireAdmin
 from backend.app.core.config import settings
+from backend.app.core.database import get_db
+from backend.app.models.spool import Spool
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.services import home_ledger_store as store
 
 router = APIRouter(prefix="/home-ledger", tags=["home-ledger"])
@@ -26,8 +30,23 @@ def paths():
     return settings.base_dir / "home-ledger.sqlite", settings.base_dir / "home-ledger-seed.json"
 
 @router.get("")
-def get_ledger(user=RequireAdmin()):
-    return store.read(*paths())
+async def get_ledger(user=RequireAdmin(), db: AsyncSession = Depends(get_db)):
+    result = store.read(*paths())
+    # Inventory is authoritative after a user adjusts or weighs a spool.
+    linked = {s.get("inventory_spool_id") for s in result["data"].get("filament_units", [])}
+    linked.discard(None)
+    if linked:
+        spools = {s.id: s for s in (await db.execute(select(Spool).where(Spool.id.in_(linked)))).scalars()}
+        for unit in result["data"].get("filament_units", []):
+            spool = spools.get(unit.get("inventory_spool_id"))
+            if spool is None:
+                continue
+            known = spool.label_weight > 0
+            unit["estimated_used_g"] = round(spool.weight_used, 2) if known else None
+            unit["estimated_remaining_g"] = round(max(0, spool.label_weight - spool.weight_used), 2) if known else None
+            if known and unit.get("pending_print_g"):
+                unit["estimated_remaining_after_pending_g"] = round(max(0, spool.label_weight - spool.weight_used - unit["pending_print_g"]), 2)
+    return result
 
 @router.patch("/orders/{order_id}")
 def patch_order(order_id: str, patch: OrderPatch, user=RequireAdmin()):

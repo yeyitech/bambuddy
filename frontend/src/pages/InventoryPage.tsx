@@ -1,3 +1,4 @@
+import HomeLedgerPage from './HomeLedgerPage';
 import { useState, useMemo, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -363,13 +364,13 @@ const columnCells: Record<string, (ctx: CellCtx) => ReactNode> = {
     );
   },
   label_weight: ({ spool }) => (
-    <span className="text-sm text-white">{formatWeight(spool.label_weight)}</span>
+    <span className="text-sm text-white">{spool.label_weight > 0 ? formatWeight(spool.label_weight) : '待核对'}</span>
   ),
-  net: ({ remaining }) => (
-    <span className="text-sm text-white">{formatWeight(remaining)}</span>
+  net: ({ spool, remaining }) => (
+    <span className="text-sm text-white">{spool.label_weight > 0 ? formatWeight(remaining) : '待核对'}</span>
   ),
   gross: ({ spool, remaining }) => (
-    <span className="text-sm text-bambu-gray">{formatWeight(remaining + spool.core_weight)}</span>
+    <span className="text-sm text-bambu-gray">{spool.label_weight > 0 && spool.core_weight > 0 ? formatWeight(remaining + spool.core_weight) : '待核对'}</span>
   ),
   added_full: ({ spool }) => (
     <span className="text-sm text-bambu-gray">{spool.added_full == null ? '-' : spool.added_full ? 'Yes' : 'No'}</span>
@@ -448,7 +449,7 @@ const columnCells: Record<string, (ctx: CellCtx) => ReactNode> = {
     }
     return <span className="text-sm text-bambu-gray">-</span>;
   },
-  remaining: ({ remaining, pct }) => (
+  remaining: ({ spool, remaining, pct }) => (spool.label_weight <= 0 ? <span className="text-sm text-amber-400">净重待核对</span> :
     <div className="flex items-center gap-2">
       <div className="flex-1 h-2 bg-bambu-dark-tertiary rounded-full overflow-hidden">
         <div
@@ -469,6 +470,7 @@ const columnCells: Record<string, (ctx: CellCtx) => ReactNode> = {
     </span>
   ),
   weight_check: ({ spool, onSyncWeight }) => {
+    if (spool.label_weight <= 0 || spool.core_weight <= 0) return <span className="text-sm text-bambu-gray">净重／皮重待核对</span>;
     const scaleWeight = spool.last_scale_weight;
     if (scaleWeight == null) return <span className="text-sm text-bambu-gray/50" title="No scale measurement">-</span>;
 
@@ -614,6 +616,8 @@ function saveSortState(state: SortState) {
 
 // Wrapper: detects Spoolman mode and passes it to the shared inventory UI
 export default function InventoryPageRouter() {
+  const { isAdmin } = useAuth();
+  const [homeView, setHomeView] = useState<'registered'|'tracked'>('tracked');
   const { data: spoolmanSettings } = useQuery({
     queryKey: ['spoolman-settings'],
     queryFn: api.getSpoolmanSettings,
@@ -624,7 +628,11 @@ export default function InventoryPageRouter() {
   const spoolmanMode =
     spoolmanSettings?.spoolman_enabled === 'true' && !!spoolmanSettings?.spoolman_url;
 
-  return <InventoryPage spoolmanMode={spoolmanMode} spoolmanModeReady={spoolmanModeReady} />;
+  return <>{isAdmin&&<p className="px-4 md:px-8 pt-5 text-sm text-bambu-gray">已登记全部采购耗材（含在途和无盘补充装）。已使用耗材按历史估算；进行中的打印仅作预计用料，尚未结算。未知净重显示“待核对”，在途重量不计入可用总量；皮重尚未测量，称重前请先登记空盘重量。</p>}{isAdmin&&<div className="px-4 md:px-8 pt-6 flex gap-3">
+    <button className={'px-4 py-2 rounded-lg '+(homeView==='registered'?'bg-emerald-600 text-white':'bg-black/5 dark:bg-white/5')} onClick={()=>setHomeView('registered')}>全部采购登记</button>
+    <button className={'px-4 py-2 rounded-lg '+(homeView==='tracked'?'bg-emerald-600 text-white':'bg-black/5 dark:bg-white/5')} onClick={()=>setHomeView('tracked')}>耗材库存</button>
+  </div>}
+  {isAdmin&&homeView==='registered'?<HomeLedgerPage inventoryOnly />:<InventoryPage spoolmanMode={spoolmanMode} spoolmanModeReady={spoolmanModeReady} />}</>;
 }
 
 function InventoryPage({ spoolmanMode = false, spoolmanModeReady = true }: { spoolmanMode?: boolean; spoolmanModeReady?: boolean }) {
@@ -1159,14 +1167,14 @@ function InventoryPage({ spoolmanMode = false, spoolmanModeReady = true }: { spo
       if (s.archived_at) continue;
       activeCount++;
       const remaining = Math.max(0, s.label_weight - s.weight_used);
-      totalWeight += remaining;
+      if (!s.category?.startsWith('在途')) totalWeight += remaining;
       const pct = s.label_weight > 0 ? (remaining / s.label_weight) * 100 : 0;
       const threshold = s.low_stock_threshold_pct ?? lowStockThreshold;
-      if (pct < threshold) lowStock++;
+      if (s.label_weight > 0 && !s.category?.startsWith('在途') && pct < threshold) lowStock++;
       const mat = s.material || 'Unknown';
       if (!byMaterial[mat]) byMaterial[mat] = { count: 0, weight: 0 };
       byMaterial[mat].count++;
-      byMaterial[mat].weight += remaining;
+      if (!s.category?.startsWith('在途')) byMaterial[mat].weight += remaining;
     }
     return { totalWeight, totalConsumed, lowStock, byMaterial, totalSpools: activeCount };
   }, [spools, lowStockThreshold]);
@@ -1305,13 +1313,13 @@ function InventoryPage({ spoolmanMode = false, spoolmanModeReady = true }: { spo
     if (usageFilter === 'used') {
       filtered = filtered.filter((s) => s.weight_used > 0);
     } else if (usageFilter === 'new') {
-      filtered = filtered.filter((s) => s.weight_used === 0);
+      filtered = filtered.filter((s) => s.label_weight > 0 && s.weight_used === 0 && !s.category?.startsWith('在途'));
     } else if (usageFilter === 'lowstock') {
       filtered = filtered.filter((s) => {
         const remaining = Math.max(0, s.label_weight - s.weight_used);
         const pct = s.label_weight > 0 ? (remaining / s.label_weight) * 100 : 0;
         const threshold = s.low_stock_threshold_pct ?? lowStockThreshold;
-        return pct < threshold;
+        return s.label_weight > 0 && !s.category?.startsWith('在途') && pct < threshold;
       });
     }
 
@@ -2830,7 +2838,7 @@ function SpoolCard({
         <div>
           <div className="flex justify-between text-xs text-bambu-gray mb-1">
             <span>{t('inventory.remaining')}</span>
-            <span>{Math.round(pct)}%</span>
+            <span>{spool.label_weight > 0 ? Math.round(pct)+'%' : '待核对'}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="flex-1 h-2 bg-bambu-dark-tertiary rounded-full overflow-hidden">
@@ -2840,14 +2848,14 @@ function SpoolCard({
               />
             </div>
             <span className="text-xs text-bambu-gray min-w-[40px] text-right">
-              {Math.round(remaining)}g
+              {spool.label_weight > 0 ? Math.round(remaining)+'g' : '待核对'}
             </span>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div>
             <span className="text-bambu-gray/60">{t('inventory.labelWeight')}: </span>
-            <span className="text-bambu-gray">{formatWeight(spool.label_weight)}</span>
+            <span className="text-bambu-gray">{spool.label_weight > 0 ? formatWeight(spool.label_weight) : '待核对'}</span>
           </div>
           <div>
             <span className="text-bambu-gray/60">{t('inventory.weightUsed')}: </span>
@@ -2856,6 +2864,7 @@ function SpoolCard({
             </span>
           </div>
         </div>
+        {(spool.category || spool.storage_location)&&<p className="text-xs text-bambu-gray">{spool.category}{spool.storage_location?' · '+spool.storage_location:''}</p>}
         {spool.location_id && (
           <SpoolLocationFooter
             locationId={spool.location_id}
