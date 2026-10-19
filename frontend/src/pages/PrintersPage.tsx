@@ -9200,7 +9200,7 @@ export function PrintersPage({ detail = false }: { detail?: boolean } = {}) {
 
   // Grid classes based on card size (1=small, 2=medium, 3=large, 4=xl)
   const getGridClasses = () => {
-    if (detail) return 'grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(340px,1fr)] items-start';
+    if (detail) return 'grid-cols-1 xl:grid-cols-2 items-start';
     switch (cardSize) {
       case 1: return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'; // S: many small cards
       case 2: return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'; // M: medium cards
