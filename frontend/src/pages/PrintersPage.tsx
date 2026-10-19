@@ -9715,11 +9715,8 @@ export function PrintersPage({ detail = false }: { detail?: boolean } = {}) {
 
   return (
     <div className="p-4 md:p-8">
-      {detail ? <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div><RouterLink to="/" className="inline-flex items-center gap-2 text-sm text-bambu-gray hover:text-white"><ArrowLeft className="h-4 w-4" />返回打印机</RouterLink>
-          <h1 className="mt-3 text-2xl font-bold text-white">{sortedPrinters[0]?.name ?? '打印机详情'}</h1>
-          <p className="mt-1 text-sm text-bambu-gray">实时状态、耗材与近期打印记录</p>
-        </div>
+      {detail ? <div className="mb-4">
+        <RouterLink to="/" className="inline-flex items-center gap-2 text-sm text-bambu-gray hover:text-white"><ArrowLeft className="h-4 w-4" />返回打印机</RouterLink>
       </div> : <div className="space-y-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
