@@ -14,6 +14,7 @@ interface EmbeddedCameraViewerProps {
   printerName: string;
   viewerIndex?: number;  // Used to offset multiple viewers
   onClose: () => void;
+  inline?: boolean;
 }
 
 const STORAGE_KEY_PREFIX = 'embeddedCameraState_';
@@ -36,7 +37,7 @@ const DEFAULT_STATE: CameraState = {
   height: 300,
 };
 
-export function EmbeddedCameraViewer({ printerId, printerName, viewerIndex = 0, onClose }: EmbeddedCameraViewerProps) {
+export function EmbeddedCameraViewer({ printerId, printerName, viewerIndex = 0, onClose, inline = false }: EmbeddedCameraViewerProps) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -146,11 +147,12 @@ export function EmbeddedCameraViewer({ printerId, printerName, viewerIndex = 0, 
 
   // Save state to localStorage (printer-specific)
   useEffect(() => {
+    if (inline) return;
     const saveTimeout = setTimeout(() => {
       localStorage.setItem(storageKey, JSON.stringify(state));
     }, 500);
     return () => clearTimeout(saveTimeout);
-  }, [state, storageKey]);
+  }, [state, storageKey, inline]);
 
   // Cleanup on unmount
   const stopSentRef = useRef(false);
@@ -560,8 +562,10 @@ export function EmbeddedCameraViewer({ printerId, printerName, viewerIndex = 0, 
   return (
     <div
       ref={containerRef}
-      className={`${isFullscreen ? 'fixed inset-0 z-[100]' : 'fixed z-40 rounded-lg shadow-2xl border border-bambu-dark-tertiary'} bg-bambu-dark-secondary overflow-hidden`}
-      style={isFullscreen ? undefined : {
+      role={inline ? 'region' : undefined}
+      aria-label={inline ? '实时摄像画面' : undefined}
+      className={`${isFullscreen ? 'fixed inset-0 z-[100]' : inline ? 'relative w-full rounded-xl border border-bambu-dark-tertiary' : 'fixed z-40 rounded-lg shadow-2xl border border-bambu-dark-tertiary'} bg-bambu-dark-secondary overflow-hidden`}
+      style={isFullscreen || inline ? undefined : {
         left: state.x,
         top: state.y,
         width: isMinimized ? 200 : state.width,
@@ -571,13 +575,13 @@ export function EmbeddedCameraViewer({ printerId, printerName, viewerIndex = 0, 
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between px-3 py-2 bg-bambu-dark border-b border-bambu-dark-tertiary cursor-grab active:cursor-grabbing"
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleDragTouchStart}
+        className={`flex items-center justify-between px-3 py-2 bg-bambu-dark border-b border-bambu-dark-tertiary ${inline ? "" : "cursor-grab active:cursor-grabbing"}`}
+        onMouseDown={inline ? undefined : handleMouseDown}
+        onTouchStart={inline ? undefined : handleDragTouchStart}
       >
         <div className="flex items-center gap-2 text-sm text-white truncate">
-          <GripVertical className="w-4 h-4 text-bambu-gray flex-shrink-0" />
-          <span className="truncate">{printer?.name || printerName}</span>
+          {!inline && <GripVertical className="w-4 h-4 text-bambu-gray flex-shrink-0" />}
+          <span className="truncate">{inline ? "实时摄像画面" : printer?.name || printerName}</span>
         </div>
         <div className="flex items-center gap-1 no-drag">
           <button
@@ -628,7 +632,7 @@ export function EmbeddedCameraViewer({ printerId, printerName, viewerIndex = 0, 
               <Fullscreen className="w-3.5 h-3.5 text-bambu-gray" />
             )}
           </button>
-          <button
+          {!inline && <><button
             onClick={() => setIsMinimized(!isMinimized)}
             className="p-1 hover:bg-bambu-dark-tertiary rounded"
             title={isMinimized ? 'Expand' : 'Minimize'}
@@ -645,14 +649,14 @@ export function EmbeddedCameraViewer({ printerId, printerName, viewerIndex = 0, 
             title="Close"
           >
             <X className="w-3.5 h-3.5 text-bambu-gray hover:text-red-600 dark:hover:text-red-400" />
-          </button>
+          </button></>}
         </div>
       </div>
 
       {/* Video area */}
       {!isMinimized && (
         <div
-          className={`relative w-full bg-black flex items-center justify-center overflow-hidden ${isFullscreen ? 'h-[calc(100%-40px)]' : 'h-[calc(100%-40px)]'}`}
+          className={`relative w-full bg-black flex items-center justify-center overflow-hidden ${isFullscreen ? 'h-[calc(100%-40px)]' : inline ? 'aspect-video' : 'h-[calc(100%-40px)]'}`}
           onWheel={handleWheel}
           onMouseMove={handleImageMouseMove}
           onMouseUp={handleImageMouseUp}
@@ -744,7 +748,7 @@ export function EmbeddedCameraViewer({ printerId, printerName, viewerIndex = 0, 
           </div>
 
           {/* Resize handle - hide in fullscreen */}
-          {!isFullscreen && (
+          {!isFullscreen && !inline && (
             <div
               className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize no-drag hover:bg-white/10 rounded-tl transition-colors"
               onMouseDown={handleResizeMouseDown}

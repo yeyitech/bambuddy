@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Box, History, Info } from 'lucide-react';
 import { api, withMediaToken, type Printer } from '../api/client';
+import { EmbeddedCameraViewer } from './EmbeddedCameraViewer';
+import { PrinterAccessories } from './PrinterAccessories';
 import { useAuth } from '../contexts/AuthContext';
 
 export function PrinterDetailSummary({ printer }: { printer: Printer }) {
@@ -26,6 +28,8 @@ export function PrinterDetailSummary({ printer }: { printer: Printer }) {
     ['开发者模式', status?.developer_mode == null ? '—' : status.developer_mode ? '已开启' : '未开启'],
   ];
   return <aside className="space-y-5 min-w-0" aria-label="打印机资料与历史">
+    {hasPermission('camera:view') && <div id="printer-live-camera"><EmbeddedCameraViewer printerId={printer.id} printerName={printer.name} inline onClose={() => {}} /></div>}
+    <PrinterAccessories units={status?.ams} connected={status?.connected ?? false} />
     <section className="rounded-xl border border-bambu-dark-tertiary bg-bambu-dark-secondary p-5">
       <h2 className="mb-4 flex items-center gap-2 font-semibold text-white"><Info className="h-4 w-4 text-bambu-green" />设备资料</h2>
       <dl className="space-y-3">{rows.map(([label,value]) => <div key={label} className="flex justify-between gap-4 text-sm"><dt className="text-bambu-gray">{label}</dt><dd className="text-right text-white break-words">{value}</dd></div>)}</dl>

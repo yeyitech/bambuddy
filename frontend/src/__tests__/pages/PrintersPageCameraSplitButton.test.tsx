@@ -108,6 +108,7 @@ const storage = new Map<string, string>();
 
 describe('PrintersPage — camera split button', () => {
   beforeEach(() => {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, value: vi.fn() });
     window.history.replaceState({}, '', '/');
     settingsWrites.length = 0;
     permissions.granted = ['camera:view', 'settings:update'];
@@ -165,6 +166,12 @@ describe('PrintersPage — camera split button', () => {
     expect(await screen.findByText('设备资料')).toBeInTheDocument();
     expect(window.location.pathname).toBe('/printers/1');
     expect(screen.getByRole('link', { name: '返回打印机' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '实时摄像画面' })).toBeInTheDocument();
+    expect(screen.queryByTitle('Minimize')).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name:'查看实时画面'}));
+    expect(screen.getAllByTitle('Refresh stream')).toHaveLength(1);
+    expect(openSpy).not.toHaveBeenCalled();
+
   });
 
   it('opens details from expanded card whitespace but not its camera control', async () => {

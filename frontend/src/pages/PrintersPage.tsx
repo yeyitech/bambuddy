@@ -168,6 +168,7 @@ import { Button } from '../components/Button';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { BulkPrinterToolbar, type PrinterState } from '../components/BulkPrinterToolbar';
 import { FileManagerModal } from '../components/FileManagerModal';
+import { PrinterAccessories } from '../components/PrinterAccessories';
 import { PrinterDetailSummary } from '../components/PrinterDetailSummary';
 import { EmbeddedCameraViewer } from '../components/EmbeddedCameraViewer';
 import { CameraWall } from '../components/CameraWall';
@@ -3822,7 +3823,7 @@ function PrinterCard({
   return (
     <Card
       id={`printer-card-${printer.id}`}
-      className={`relative flex h-full flex-col ${isSelected ? 'ring-2 ring-bambu-green' : ''} ${selectionMode || onOpenDetails ? 'cursor-pointer hover:border-bambu-green/50 transition-colors' : ''}`}
+      className={`relative flex ${onOpenDetails ? "h-full" : ""} flex-col ${isSelected ? 'ring-2 ring-bambu-green' : ''} ${selectionMode || onOpenDetails ? 'cursor-pointer hover:border-bambu-green/50 transition-colors' : ''}`}
       style={cardScaleStyle}
       onClick={handleCardClick}
       onDragEnter={handleCardDragEnter}
@@ -3963,6 +3964,8 @@ function PrinterCard({
               </div>
             </div>
           </div>
+
+          {onOpenDetails && <PrinterAccessories units={status?.ams} connected={status?.connected ?? false} compact />}
 
           {/* Badges row - only in expanded mode */}
           {viewMode === 'expanded' && (
@@ -9191,7 +9194,7 @@ export function PrintersPage({ detail = false }: { detail?: boolean } = {}) {
 
   // Grid classes based on card size (1=small, 2=medium, 3=large, 4=xl)
   const getGridClasses = () => {
-    if (detail) return 'grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)] items-start';
+    if (detail) return 'grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(340px,1fr)] items-start';
     switch (cardSize) {
       case 1: return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'; // S: many small cards
       case 2: return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'; // M: medium cards
@@ -9711,7 +9714,7 @@ export function PrintersPage({ detail = false }: { detail?: boolean } = {}) {
           <h1 className="mt-3 text-2xl font-bold text-white">{sortedPrinters[0]?.name ?? '打印机详情'}</h1>
           <p className="mt-1 text-sm text-bambu-gray">实时状态、耗材与近期打印记录</p>
         </div>
-        {sortedPrinters[0] && <Button disabled={!hasPermission('camera:view')} onClick={() => { const p = sortedPrinters[0]; setEmbeddedCameraPrinters(prev => new Map(prev).set(p.id, {id:p.id, name:p.name})); }}><Video className="h-4 w-4" />查看实时画面</Button>}
+        {sortedPrinters[0] && <Button disabled={!hasPermission('camera:view')} onClick={() => document.getElementById('printer-live-camera')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><Video className="h-4 w-4" />查看实时画面</Button>}
       </div> : <div className="space-y-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
@@ -9908,7 +9911,7 @@ export function PrintersPage({ detail = false }: { detail?: boolean } = {}) {
                       onUnassignSpoolmanSpool={(id) => unassignSpoolmanMutation.mutate(id)}
                       timeFormat={settings?.time_format || 'system'}
                       cameraViewMode={cameraViewMode}
-                      onOpenEmbeddedCamera={(id, name) => setEmbeddedCameraPrinters(prev => new Map(prev).set(id, { id, name }))}
+                      onOpenEmbeddedCamera={(id, name) => detail ? document.getElementById('printer-live-camera')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) : setEmbeddedCameraPrinters(prev => new Map(prev).set(id, { id, name }))}
                       checkPrinterFirmware={firmwareChecksOn}
                       dryingPresets={effectiveDryingPresets}
                       nozzleTempPresets={effectiveNozzleTempPresets}
@@ -9960,7 +9963,7 @@ export function PrintersPage({ detail = false }: { detail?: boolean } = {}) {
               } : undefined}
               timeFormat={settings?.time_format || 'system'}
               cameraViewMode={cameraViewMode}
-              onOpenEmbeddedCamera={(id, name) => setEmbeddedCameraPrinters(prev => new Map(prev).set(id, { id, name }))}
+              onOpenEmbeddedCamera={(id, name) => detail ? document.getElementById('printer-live-camera')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) : setEmbeddedCameraPrinters(prev => new Map(prev).set(id, { id, name }))}
               checkPrinterFirmware={firmwareChecksOn}
               dryingPresets={effectiveDryingPresets}
               nozzleTempPresets={effectiveNozzleTempPresets}
@@ -10037,7 +10040,7 @@ export function PrintersPage({ detail = false }: { detail?: boolean } = {}) {
       )}
 
       {/* Embedded Camera Viewers - multiple viewers can be open simultaneously */}
-      {Array.from(embeddedCameraPrinters.values()).map((camera, index) => (
+      {!detail && Array.from(embeddedCameraPrinters.values()).map((camera, index) => (
         <EmbeddedCameraViewer
           key={camera.id}
           printerId={camera.id}
