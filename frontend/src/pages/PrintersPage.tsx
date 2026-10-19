@@ -7,8 +7,6 @@ import { isBedSlinger } from '../utils/bedSlinger';
 import { computePopoverPosition, type PopoverPosition } from '../utils/popoverPosition';
 import {
   openCameraWindow,
-  readStoredCameraViewMode,
-  storeCameraViewMode,
   type CameraViewMode,
 } from '../utils/camera';
 import { resolveDryingPresetKey, type DryingPreset } from '../utils/dryingPresets';
@@ -161,7 +159,7 @@ import {
 import { ConfirmOutcomeDialog } from '../components/ConfirmOutcomeDialog';
 
 // Aliased: lucide-react already exports a `Link` icon into this module.
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { api, discoveryApi, firmwareApi, withMediaToken, ApiError } from '../api/client';
 import { formatDateOnly, formatDateTime, formatETA, formatDuration, formatDurationFromHours, parseUTCDate } from '../utils/date';
 import type { Printer, PrinterCreate, PrinterStatus, AMSUnit, DiscoveredPrinter, FirmwareUpdateInfo, FirmwareUploadStatus, LinkedSpoolInfo, SpoolAssignment, HMSError, InventorySpool, SmartPlug, PrinterDiagnosticResult } from '../api/client';
@@ -170,6 +168,7 @@ import { Button } from '../components/Button';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { BulkPrinterToolbar, type PrinterState } from '../components/BulkPrinterToolbar';
 import { FileManagerModal } from '../components/FileManagerModal';
+import { PrinterDetailSummary } from '../components/PrinterDetailSummary';
 import { EmbeddedCameraViewer } from '../components/EmbeddedCameraViewer';
 import { CameraWall } from '../components/CameraWall';
 import { ContextMenu, type ContextMenuItem } from '../components/ContextMenu';
@@ -2049,16 +2048,15 @@ function PrinterCard({
   spoolmanLoading = false,
   onUnassignSpoolmanSpool,
   timeFormat = 'system',
-  cameraViewMode = 'window',
+  cameraViewMode = 'embedded',
   onOpenEmbeddedCamera,
-  onSelectCameraViewMode,
   checkPrinterFirmware = true,
   dryingPresets = DRYING_PRESETS,
   requirePlateClear = false,
   selectionMode = false,
   isSelected = false,
   onToggleSelect,
-  onOpenCompactCard,
+  onOpenDetails,
   nozzleTempPresets = NOZZLE_TEMP_DEFAULTS,
   bedTempPresets = BED_TEMP_DEFAULTS,
   chamberTempPresets = CHAMBER_TEMP_DEFAULTS,
@@ -2093,14 +2091,13 @@ function PrinterCard({
   timeFormat?: 'system' | '12h' | '24h';
   cameraViewMode?: CameraViewMode;
   onOpenEmbeddedCamera?: (printerId: number, printerName: string) => void;
-  onSelectCameraViewMode?: (mode: CameraViewMode) => void;
   checkPrinterFirmware?: boolean;
   dryingPresets?: Record<string, DryingPreset>;
   requirePlateClear?: boolean;
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (id: number) => void;
-  onOpenCompactCard?: (id: number) => void;
+  onOpenDetails?: (id: number) => void;
   nozzleTempPresets?: readonly [number, number, number];
   bedTempPresets?: readonly [number, number, number];
   chamberTempPresets?: readonly [number, number, number];
@@ -3573,18 +3570,16 @@ function PrinterCard({
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
-    if (viewMode !== 'compact' || selectionMode) return;
+    if (selectionMode || !onOpenDetails || window.getSelection()?.toString()) return;
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea, [role="button"]')) return;
-    onOpenCompactCard?.(printer.id);
+    if (target.closest('button, a, input, select, textarea, label, [role="button"], [role="switch"], [role="slider"], [role="menuitem"], [contenteditable="true"]')) return;
+    onOpenDetails?.(printer.id);
   };
 
   const footerActionButtonClass = '!h-8 !min-h-8 !px-2 !py-0';
   const footerIconButtonClass = '!h-8 !min-h-8 !w-8 !px-0 !py-0';
 
-  // Opening a camera in a given mode, without touching which mode is remembered
-  // -- the split button's two halves want the same action but disagree about
-  // whether the choice was deliberate enough to keep.
+  // The main action opens an overlay; the menu can explicitly open a window.
   const openCameraIn = (mode: CameraViewMode) => {
     if (mode === 'embedded' && onOpenEmbeddedCamera) {
       onOpenEmbeddedCamera(printer.id, printer.name);
@@ -3593,9 +3588,7 @@ function PrinterCard({
     }
   };
 
-  // Picking a mode both opens the camera that way and makes it the mode the
-  // plain icon uses from now on. A menu that only changed a preference would
-  // leave the user with a second click to do the thing they already asked for.
+  // Alternative views apply to this click only.
   const cameraViewModeMenuItems: ContextMenuItem[] = (
     [
       {
@@ -3613,13 +3606,10 @@ function PrinterCard({
     ]
   ).map(({ mode, icon, label, title }) => ({
     icon,
-    // The remembered mode is marked in the label itself: the icon slot already
-    // carries the mode's own icon, and a separate tick column would push both
-    // entries out of line with every other card menu.
+    // Mark the main button's default action.
     label: mode === cameraViewMode ? `${label} ✓` : label,
     title,
     onClick: () => {
-      onSelectCameraViewMode?.(mode);
       openCameraIn(mode);
     },
   }));
@@ -3832,7 +3822,7 @@ function PrinterCard({
   return (
     <Card
       id={`printer-card-${printer.id}`}
-      className={`relative flex h-full flex-col ${isSelected ? 'ring-2 ring-bambu-green' : ''} ${selectionMode || viewMode === 'compact' ? 'cursor-pointer' : ''}`}
+      className={`relative flex h-full flex-col ${isSelected ? 'ring-2 ring-bambu-green' : ''} ${selectionMode || onOpenDetails ? 'cursor-pointer hover:border-bambu-green/50 transition-colors' : ''}`}
       style={cardScaleStyle}
       onClick={handleCardClick}
       onDragEnter={handleCardDragEnter}
@@ -3905,7 +3895,9 @@ function PrinterCard({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    <h3 className={`font-semibold text-white ${getTitleSize()}`}>{printer.name}</h3>
+                    <h3 aria-label={printer.name} className={`font-semibold text-white ${getTitleSize()}`}>
+                      {onOpenDetails ? <RouterLink to={`/printers/${printer.id}`} className="hover:text-bambu-green focus-visible:outline focus-visible:outline-2 focus-visible:outline-bambu-green" aria-label={`查看 ${printer.name} 详情`}>{printer.name}<span className="ml-2 text-xs font-normal text-bambu-green">查看详情 →</span></RouterLink> : printer.name}
+                    </h3>
                     {/* Connection indicator dot for compact mode */}
                     {viewMode === 'compact' && (() => {
                       const hmsErrors = status?.connected && status.hms_errors ? filterKnownHMSErrors(status.hms_errors) : [];
@@ -6657,11 +6649,7 @@ function PrinterCard({
             <div className="flex items-center justify-between gap-2">
               {printerActionsMenu}
               <div className="flex items-center justify-end gap-2 flex-wrap">
-                {/* Camera split button: the icon opens whichever view was used
-                    last, the caret picks between the two and remembers it.
-                    Replaces the old Settings > General > Camera switch, which
-                    made choosing between an overlay and a window a trip to
-                    another page for something you decide per camera. */}
+                {/* Primary action: floating video. Menu: explicit alternate view. */}
                 <div className="flex items-center flex-shrink-0">
                   <Button
                     variant="secondary"
@@ -8766,18 +8754,11 @@ function PowerDropdownItem({
   );
 }
 
-export function PrintersPage() {
+export function PrintersPage({ detail = false }: { detail?: boolean } = {}) {
+  const { printerId: routePrinterId } = useParams();
+  const detailPrinterId = detail ? Number(routePrinterId) : null;
+  const navigate = useNavigate();
   const { t } = useTranslation();
-  const { resolvedMode, darkAccent, lightAccent } = useTheme();
-  const activeAccent = resolvedMode === 'dark' ? darkAccent : lightAccent;
-  const accentButtonClass = {
-    green: 'bg-green-500 text-white hover:bg-green-400 border-green-400/60',
-    teal: 'bg-teal-500 text-white hover:bg-teal-400 border-teal-400/60',
-    blue: 'bg-blue-500 text-white hover:bg-blue-400 border-blue-400/60',
-    orange: 'bg-orange-500 text-white hover:bg-orange-400 border-orange-400/60',
-    purple: 'bg-purple-500 text-white hover:bg-purple-400 border-purple-400/60',
-    red: 'bg-red-500 text-white hover:bg-red-400 border-red-400/60',
-  }[activeAccent];
   const [showAddModal, setShowAddModal] = useState(false);
   const [hideDisconnected, setHideDisconnected] = useState(() => {
     return localStorage.getItem('hideDisconnectedPrinters') === 'true';
@@ -8818,37 +8799,7 @@ export function PrintersPage() {
     return saved === 'off' || saved === 'compact' || saved === 'full' ? saved : 'full';
   });
   // Derive viewMode from cardSize: S=compact, M/L/XL=expanded
-  const viewMode: ViewMode = cardSize === 1 ? 'compact' : 'expanded';
-  const [compactDrilldownPrinterId, setCompactDrilldownPrinterId] = useState<number | null>(null);
-  const scrollPrinterIntoView = useCallback((printerId: number) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const card = document.getElementById(`printer-card-${printerId}`);
-        if (!card) return;
-        const fixedHeaderHeight = document.querySelector('header')?.getBoundingClientRect().height ?? 56;
-        const top = card.getBoundingClientRect().top + window.scrollY - fixedHeaderHeight - 16;
-        window.scrollTo({
-          top: Math.max(0, top),
-          behavior: 'smooth',
-        });
-      });
-    });
-  }, []);
-  const openCompactCard = useCallback((printerId: number) => {
-    setCompactDrilldownPrinterId(printerId);
-    setCardSize(2);
-    localStorage.setItem('printerCardSize', '2');
-    scrollPrinterIntoView(printerId);
-  }, [scrollPrinterIntoView]);
-  const returnToCompactCards = useCallback(() => {
-    const printerId = compactDrilldownPrinterId;
-    setCompactDrilldownPrinterId(null);
-    setCardSize(1);
-    localStorage.setItem('printerCardSize', '1');
-    if (printerId != null) {
-      scrollPrinterIntoView(printerId);
-    }
-  }, [compactDrilldownPrinterId, scrollPrinterIntoView]);
+  const viewMode: ViewMode = !detail && cardSize === 1 ? 'compact' : 'expanded';
   const [search, setSearch] = useState('');
   // Both filters persist like every other preference on this page (#2833).
   // `search` deliberately does not: a box that silently refills itself on
@@ -8872,12 +8823,6 @@ export function PrintersPage() {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const { hasPermission } = useAuth();
-  // Which way the camera buttons open a stream. Chosen per click from the
-  // button's own menu; null until this browser has made a choice, so the
-  // stored setting below can act as the default a fresh browser starts from.
-  const [chosenCameraViewMode, setChosenCameraViewMode] = useState<CameraViewMode | null>(
-    () => readStoredCameraViewMode()
-  );
   // Embedded camera viewer state - supports multiple simultaneous viewers
   // Persisted to localStorage so cameras reopen after navigation
   const [embeddedCameraPrinters, setEmbeddedCameraPrinters] = useState<Map<number, { id: number; name: string }>>(() => {
@@ -8952,24 +8897,9 @@ export function PrintersPage() {
     return DRYING_PRESETS;
   }, [settings?.drying_presets]);
 
-  // The local choice wins over the stored one: someone without settings:update
-  // cannot write their pick back, and a preference that silently reverted on
-  // the next render would be worse than none at all.
-  const cameraViewMode: CameraViewMode =
-    chosenCameraViewMode ?? (settings?.camera_view_mode === 'embedded' ? 'embedded' : 'window');
-
-  const selectCameraViewMode = useCallback((mode: CameraViewMode) => {
-    storeCameraViewMode(mode);
-    setChosenCameraViewMode(mode);
-    // Best effort, and only a default for other browsers -- the choice is
-    // already in effect here. Users below settings:update simply keep theirs
-    // locally, which is why the failure is logged rather than surfaced.
-    if (hasPermission('settings:update')) {
-      api.updateSettings({ camera_view_mode: mode })
-        .then(() => queryClient.invalidateQueries({ queryKey: ['ui-preferences'] }))
-        .catch((err) => console.warn('Could not save camera view mode as the default:', err));
-    }
-  }, [hasPermission, queryClient]);
+  // Always stay on the page, including browsers with an old window preference.
+  // A separate window remains an explicit one-off action in the adjacent menu.
+  const cameraViewMode: CameraViewMode = 'embedded';
 
   // Fetch all smart plugs to know which printers have them
   const { data: smartPlugs } = useQuery({
@@ -9261,6 +9191,7 @@ export function PrintersPage() {
 
   // Grid classes based on card size (1=small, 2=medium, 3=large, 4=xl)
   const getGridClasses = () => {
+    if (detail) return 'grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)] items-start';
     switch (cardSize) {
       case 1: return 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'; // S: many small cards
       case 2: return 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'; // M: medium cards
@@ -9290,6 +9221,7 @@ export function PrintersPage() {
   // Filter printers by search term, status, and location
   const filteredPrinters = useMemo(() => {
     if (!printers) return [];
+    if (detail) return printers.filter(p => p.id === detailPrinterId);
     let result = printers;
 
     // Text search
@@ -9328,7 +9260,7 @@ export function PrintersPage() {
 
     return result;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- statusCacheVersion is intentional: it forces recompute when WebSocket updates printer status cache
-  }, [printers, search, statusFilter, locationFilter, queryClient, statusCacheVersion]);
+  }, [printers, search, statusFilter, locationFilter, queryClient, statusCacheVersion, detail, detailPrinterId]);
 
   // Derive unique locations for the location filter dropdown
   const availableLocations = useMemo(() => {
@@ -9464,7 +9396,7 @@ export function PrintersPage() {
 
   // Group printers when sorted by location, status, or model
   const groupedPrinters = useMemo(() => {
-    if (sortBy === 'name' || sortBy === 'eta') return null;
+    if (detail || sortBy === 'name' || sortBy === 'eta') return null;
 
     const groups: Record<string, typeof sortedPrinters> = {};
 
@@ -9491,7 +9423,7 @@ export function PrintersPage() {
 
     return groups;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- classifyPrinterStatus & filterKnownHMSErrors are stable module-level functions, not reactive deps; statusCacheVersion forces recompute on WebSocket status updates
-  }, [sortBy, sortedPrinters, queryClient, statusCacheVersion]);
+  }, [sortBy, sortedPrinters, queryClient, statusCacheVersion, detail]);
 
   const toolbarRef = useRef<HTMLDivElement>(null);
   const expandedToolbarControlsRef = useRef<HTMLDivElement>(null);
@@ -9668,7 +9600,6 @@ export function PrintersPage() {
             <button
               key={label}
               onClick={() => {
-                setCompactDrilldownPrinterId(null);
                 setCardSize(size);
                 localStorage.setItem('printerCardSize', String(size));
               }}
@@ -9775,7 +9706,13 @@ export function PrintersPage() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="space-y-3 mb-6">
+      {detail ? <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div><RouterLink to="/" className="inline-flex items-center gap-2 text-sm text-bambu-gray hover:text-white"><ArrowLeft className="h-4 w-4" />返回打印机</RouterLink>
+          <h1 className="mt-3 text-2xl font-bold text-white">{sortedPrinters[0]?.name ?? '打印机详情'}</h1>
+          <p className="mt-1 text-sm text-bambu-gray">实时状态、耗材与近期打印记录</p>
+        </div>
+        {sortedPrinters[0] && <Button disabled={!hasPermission('camera:view')} onClick={() => { const p = sortedPrinters[0]; setEmbeddedCameraPrinters(prev => new Map(prev).set(p.id, {id:p.id, name:p.name})); }}><Video className="h-4 w-4" />查看实时画面</Button>}
+      </div> : <div className="space-y-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <PrinterIcon className="w-7 h-7 text-bambu-green" />
@@ -9840,10 +9777,12 @@ export function PrintersPage() {
             </div>
           )}
         </div>
-      </div>
+      </div>}
 
       {isLoading ? (
         <div className="text-center py-12 text-bambu-gray">{t('common.loading')}</div>
+      ) : detail && sortedPrinters.length === 0 ? (
+        <p role="status" className="py-12 text-bambu-gray">无法找到这台打印机，或当前账户无权查看。<RouterLink to="/" className="ml-2 text-bambu-green">返回打印机</RouterLink></p>
       ) : printers?.length === 0 ? (
         <Card>
           <CardContent className="text-center py-12">
@@ -9864,14 +9803,13 @@ export function PrintersPage() {
             <p className="text-bambu-gray">{t('printers.noSearchResults')}</p>
           </CardContent>
         </Card>
-      ) : pageView === 'camwall' ? (
+      ) : !detail && pageView === 'camwall' ? (
         <CameraWall
           printers={sortedPrinters}
           maxLive={camWallMaxLive}
           snapshotIntervalSec={camWallSnapshotSec}
           onTileClick={(id, name) => {
-            // A wall tile has no room for a split button, so it follows the
-            // mode the card buttons last chose.
+            // Camera-wall tiles use the same floating viewer as the cards.
             if (cameraViewMode === 'embedded') {
               setEmbeddedCameraPrinters(prev => new Map(prev).set(id, { id, name }));
             } else {
@@ -9947,10 +9885,10 @@ export function PrintersPage() {
                     <PrinterCard
                       key={printer.id}
                       printer={printer}
-                      hideIfDisconnected={hideDisconnected}
+                      hideIfDisconnected={!detail && hideDisconnected}
                       maintenanceInfo={maintenanceByPrinter[printer.id]}
                       viewMode={viewMode}
-                      cardSize={cardSize}
+                      cardSize={detail ? 2 : cardSize}
                       amsThresholds={settings ? {
                         humidityGood: Number(settings.ams_humidity_good) || 40,
                         humidityFair: Number(settings.ams_humidity_fair) || 60,
@@ -9971,7 +9909,6 @@ export function PrintersPage() {
                       timeFormat={settings?.time_format || 'system'}
                       cameraViewMode={cameraViewMode}
                       onOpenEmbeddedCamera={(id, name) => setEmbeddedCameraPrinters(prev => new Map(prev).set(id, { id, name }))}
-                      onSelectCameraViewMode={selectCameraViewMode}
                       checkPrinterFirmware={firmwareChecksOn}
                       dryingPresets={effectiveDryingPresets}
                       nozzleTempPresets={effectiveNozzleTempPresets}
@@ -9979,10 +9916,10 @@ export function PrintersPage() {
                       chamberTempPresets={effectiveChamberTempPresets}
                       fanSpeedPresets={effectiveFanSpeedPresets}
                       requirePlateClear={settings?.require_plate_clear === true}
-                      selectionMode={selectionMode}
-                      isSelected={selectedPrinterIds.has(printer.id)}
+                      selectionMode={!detail && selectionMode}
+                      isSelected={!detail && selectedPrinterIds.has(printer.id)}
                       onToggleSelect={toggleSelect}
-                      onOpenCompactCard={openCompactCard}
+                      onOpenDetails={detail ? undefined : (id) => navigate(`/printers/${id}`)}
                       aiDetectionEnabled={isAiMonitored(printer.id)}
                       aiDetection={obicoPrinterStatus?.enabled ? obicoPrinterStatus.per_printer[String(printer.id)] : undefined}
                       aiLastError={obicoPrinterStatus?.last_error ?? null}
@@ -10000,10 +9937,10 @@ export function PrintersPage() {
             <PrinterCard
               key={printer.id}
               printer={printer}
-              hideIfDisconnected={hideDisconnected}
+              hideIfDisconnected={!detail && hideDisconnected}
               maintenanceInfo={maintenanceByPrinter[printer.id]}
               viewMode={viewMode}
-              cardSize={cardSize}
+              cardSize={detail ? 2 : cardSize}
               spoolmanEnabled={spoolmanEnabled}
               hasUnlinkedSpools={hasUnlinkedSpools}
               linkedSpools={linkedSpools}
@@ -10024,7 +9961,6 @@ export function PrintersPage() {
               timeFormat={settings?.time_format || 'system'}
               cameraViewMode={cameraViewMode}
               onOpenEmbeddedCamera={(id, name) => setEmbeddedCameraPrinters(prev => new Map(prev).set(id, { id, name }))}
-              onSelectCameraViewMode={selectCameraViewMode}
               checkPrinterFirmware={firmwareChecksOn}
               dryingPresets={effectiveDryingPresets}
               nozzleTempPresets={effectiveNozzleTempPresets}
@@ -10032,28 +9968,17 @@ export function PrintersPage() {
               chamberTempPresets={effectiveChamberTempPresets}
               fanSpeedPresets={effectiveFanSpeedPresets}
               requirePlateClear={settings?.require_plate_clear === true}
-              selectionMode={selectionMode}
-              isSelected={selectedPrinterIds.has(printer.id)}
+              selectionMode={!detail && selectionMode}
+              isSelected={!detail && selectedPrinterIds.has(printer.id)}
               onToggleSelect={toggleSelect}
-              onOpenCompactCard={openCompactCard}
+              onOpenDetails={detail ? undefined : (id) => navigate(`/printers/${id}`)}
               aiDetectionEnabled={isAiMonitored(printer.id)}
               aiDetection={obicoPrinterStatus?.enabled ? obicoPrinterStatus.per_printer[String(printer.id)] : undefined}
               aiLastError={obicoPrinterStatus?.last_error ?? null}
             />
           ))}
+          {detail && sortedPrinters[0] && <PrinterDetailSummary printer={sortedPrinters[0]} />}
         </div>
-      )}
-
-      {cardSize === 2 && compactDrilldownPrinterId != null && (
-        <button
-          type="button"
-          onClick={returnToCompactCards}
-          className={`fixed bottom-5 left-1/2 z-40 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium shadow-xl transition-colors ${accentButtonClass}`}
-          title={t('common.back', 'Back')}
-        >
-          <ArrowLeft className="w-4 h-4" />
-          {t('common.back', 'Back')}
-        </button>
       )}
 
       {showAddModal && (

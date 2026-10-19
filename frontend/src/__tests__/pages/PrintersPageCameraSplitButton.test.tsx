@@ -1,15 +1,5 @@
-/**
- * The printer card's camera button chooses its own view mode.
- *
- * Window-vs-overlay used to be one switch in Settings > General > Camera, so
- * watching one printer in an overlay and another in its own window meant a trip
- * to another page and back. The button is now a split control: the icon opens
- * whichever mode was used last, the caret picks between the two. The stored
- * setting survives only as the default a browser that has never chosen starts
- * from -- the local choice wins after that, because a user without
- * settings:update cannot write theirs back and would otherwise never keep one.
- */
 import React from 'react';
+import { Routes, Route } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -90,7 +80,7 @@ function renderPage(storedMode: 'window' | 'embedded' = 'window') {
       return HttpResponse.json(body);
     }),
   );
-  return render(<PrintersPage />);
+  return render(<Routes><Route path="/" element={<PrintersPage />} /><Route path="/printers/:printerId" element={<PrintersPage detail />} /></Routes>);
 }
 
 /** The camera icon, whichever of the two modes it currently promises. */
@@ -118,6 +108,7 @@ const storage = new Map<string, string>();
 
 describe('PrintersPage — camera split button', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/');
     settingsWrites.length = 0;
     permissions.granted = ['camera:view', 'settings:update'];
     storage.clear();
@@ -135,90 +126,74 @@ describe('PrintersPage — camera split button', () => {
     openSpy.mockRestore();
   });
 
-  it('opens a separate window when that is the mode in effect', async () => {
+
+  it('opens a floating viewer even with a saved window preference', async () => {
+    storage.set('cameraViewMode', 'window');
     renderPage('window');
     fireEvent.click(await cameraIcon());
-
-    expect(openSpy).toHaveBeenCalledWith(
-      '/camera/1',
-      'camera-1',
-      expect.stringContaining('width=640')
-    );
-  });
-
-  it('offers both modes from the caret', async () => {
-    renderPage('window');
-    await openModeMenu();
-
-    expect(await screen.findByText(/New Window/)).toBeInTheDocument();
-    expect(await screen.findByText(/Embedded Overlay/)).toBeInTheDocument();
-  });
-
-  it('opens the overlay when the overlay is picked, instead of a window', async () => {
-    renderPage('window');
-    await openModeMenu();
-    fireEvent.click(await screen.findByText(/Embedded Overlay/));
-
-    // "Refresh stream" is the overlay's own control; the card has no such button.
     expect(await screen.findByTitle('Refresh stream')).toBeInTheDocument();
     expect(openSpy).not.toHaveBeenCalled();
-  });
-
-  it('remembers the picked mode for the next visit', async () => {
-    renderPage('window');
-    await openModeMenu();
-    fireEvent.click(await screen.findByText(/Embedded Overlay/));
-
-    await waitFor(() => expect(storage.get('cameraViewMode')).toBe('embedded'));
-  });
-
-  it('uses a remembered choice over the stored setting', async () => {
-    // The case that makes the local choice authoritative: the install-wide
-    // default still says window, but this browser has asked for the overlay.
-    storage.set('cameraViewMode', 'embedded');
-    renderPage('window');
-    fireEvent.click(await cameraIcon());
-
-    expect(await screen.findByTitle('Refresh stream')).toBeInTheDocument();
-    expect(openSpy).not.toHaveBeenCalled();
-  });
-
-  it('falls back to the stored setting in a browser that has never chosen', async () => {
-    renderPage('embedded');
-    await waitFor(() => expect(screen.queryByTitle('Open camera overlay')).not.toBeNull());
-    fireEvent.click(await cameraIcon());
-
-    expect(await screen.findByTitle('Refresh stream')).toBeInTheDocument();
-    expect(openSpy).not.toHaveBeenCalled();
-  });
-
-  it('marks which mode the plain icon will use', async () => {
-    storage.set('cameraViewMode', 'embedded');
-    renderPage('window');
-    await openModeMenu();
-
-    expect(await screen.findByText('Embedded Overlay ✓')).toBeInTheDocument();
-    expect(await screen.findByText('New Window')).toBeInTheDocument();
-  });
-
-  it('saves the pick as the install-wide default when allowed to', async () => {
-    renderPage('window');
-    await openModeMenu();
-    fireEvent.click(await screen.findByText(/Embedded Overlay/));
-
-    await waitFor(() => expect(settingsWrites).toEqual([{ camera_view_mode: 'embedded' }]));
-  });
-
-  it('still applies the pick for a user who cannot write settings', async () => {
-    // A viewer has camera:view but not settings:update. Their choice has to
-    // stick locally, or the menu would appear to do nothing on the next click.
-    permissions.granted = ['camera:view'];
-    renderPage('window');
-    await openModeMenu();
-    fireEvent.click(await screen.findByText(/Embedded Overlay/));
-
-    expect(await screen.findByTitle('Refresh stream')).toBeInTheDocument();
-    await waitFor(() => expect(storage.get('cameraViewMode')).toBe('embedded'));
+    expect(window.location.pathname).toBe('/');
     expect(settingsWrites).toEqual([]);
+  });
+
+  it('only opens a separate window explicitly from the menu', async () => {
+    renderPage();
+    await openModeMenu();
+    fireEvent.click(await screen.findByText('New Window'));
+    expect(openSpy).toHaveBeenCalledWith('/camera/1', 'camera-1', expect.stringContaining('width=640'));
+    openSpy.mockClear();
+    fireEvent.click(await cameraIcon());
+    expect(await screen.findByTitle('Refresh stream')).toBeInTheDocument();
+    expect(openSpy).not.toHaveBeenCalled();
+    expect(settingsWrites).toEqual([]);
+  });
+
+  it('keeps camera permissions on the overlay action', async () => {
+    permissions.granted = [];
+    renderPage();
+    await waitFor(() => expect(document.getElementById('printer-card-1')).not.toBeNull());
+    expect(screen.getByLabelText('Camera View Mode')).toBeDisabled();
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('links the printer name to its dedicated detail page', async () => {
+    renderPage();
+    const link = await screen.findByRole('link', { name: '查看 X1C 详情' });
+    expect(link).toHaveAttribute('href', '/printers/1');
+    fireEvent.click(link);
+    expect(await screen.findByText('设备资料')).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/printers/1');
+    expect(screen.getByRole('link', { name: '返回打印机' })).toBeInTheDocument();
+  });
+
+  it('opens details from expanded card whitespace but not its camera control', async () => {
+    renderPage();
+    fireEvent.click(await cameraIcon());
+    expect(window.location.pathname).toBe('/');
+    fireEvent.click(document.getElementById('printer-card-1')!);
+    expect(await screen.findByText('设备资料')).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/printers/1');
+  });
+
+  it('shows the selected printer regardless of saved overview filters and camera-wall view', async () => {
+    storage.set('printerPageView', 'camwall');
+    storage.set('printerStatusFilter', 'offline');
+    storage.set('hideDisconnectedPrinters', 'true');
+    storage.set('printerSortBy', 'status');
+    storage.set('printerCardSize', '1');
+    window.history.replaceState({}, '', '/printers/1');
+    renderPage();
+    expect(await screen.findByText('设备资料')).toBeInTheDocument();
+    expect(document.getElementById('printer-card-1')).not.toBeNull();
+    expect(screen.getByRole('button', {name:'查看实时画面'})).toBeInTheDocument();
+    expect(storage.get('printerCardSize')).toBe('1');
+  });
+
+  it('handles a missing printer without showing another device', async () => {
+    window.history.replaceState({}, '', '/printers/9999');
+    renderPage();
+    expect(await screen.findByText(/无法找到这台打印机/)).toBeInTheDocument();
+    expect(document.getElementById('printer-card-1')).toBeNull();
   });
 });
