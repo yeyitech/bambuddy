@@ -14,3 +14,16 @@ services:
       LOG_LEVEL: INFO
     cap_add:
       - NET_BIND_SERVICE
+
+  material-accounting:
+    image: ${BAMBUDDY_IMAGE:?Set a pinned image}
+    container_name: bambuddy-material-accounting
+    restart: unless-stopped
+    network_mode: none
+    entrypoint: ["python", "-m", "backend.app.services.home_material_accounting"]
+    command: ["--data", "/app/data", "--jobs", "/jobs", "--watch"]
+    volumes:
+      - ${BAMBUDDY_STATE:?Set a private state directory}/data:/app/data
+      - ${BAMBUDDY_JOBS:-/Users/codefriday/.ops/bambu-x2d/jobs}:/jobs:ro
+    depends_on:
+      - bambuddy

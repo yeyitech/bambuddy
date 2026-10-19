@@ -32,6 +32,13 @@ def paths():
 @router.get("")
 async def get_ledger(user=RequireAdmin(), db: AsyncSession = Depends(get_db)):
     result = store.read(*paths())
+    from backend.app.services.home_material_accounting import summary
+    material = summary(settings.base_dir)
+    planned = {}
+    for job in material.get("running", []):
+        for usage in job["planned_usage"]:
+            sid = usage["spool_id"]
+            planned[sid] = planned.get(sid, 0) + usage["grams"]
     # Inventory is authoritative after a user adjusts or weighs a spool.
     linked = {s.get("inventory_spool_id") for s in result["data"].get("filament_units", [])}
     linked.discard(None)
@@ -42,7 +49,10 @@ async def get_ledger(user=RequireAdmin(), db: AsyncSession = Depends(get_db)):
             if spool is None:
                 continue
             known = spool.label_weight > 0
-            unit["estimated_used_g"] = round(spool.weight_used, 2) if known else None
+            unit["pending_print_g"] = round(planned.get(spool.id, 0), 2)
+            unit["estimated_remaining_after_pending_g"] = None
+            unit["estimated_used_g"] = round(spool.weight_used, 2)
+            unit["nominal_g"] = spool.label_weight if known else None
             unit["estimated_remaining_g"] = round(max(0, spool.label_weight - spool.weight_used), 2) if known else None
             if known and unit.get("pending_print_g"):
                 unit["estimated_remaining_after_pending_g"] = round(max(0, spool.label_weight - spool.weight_used - unit["pending_print_g"]), 2)
@@ -63,3 +73,23 @@ def patch_order(order_id: str, patch: OrderPatch, user=RequireAdmin()):
         raise HTTPException(409, str(exc)) from exc
     except KeyError as exc:
         raise HTTPException(404, "记录不存在") from exc
+
+
+
+class WasteMeasurement(BaseModel):
+    waste_g: float = Field(ge=0, allow_inf_nan=False)
+    note: str = Field(min_length=1, max_length=1000)
+
+@router.get("/material-accounting")
+def get_material_accounting(user=RequireAdmin()):
+    from backend.app.services.home_material_accounting import summary
+    return summary(settings.base_dir)
+
+@router.put("/material-accounting/{run_id}/waste")
+def put_material_waste(run_id: int, body: WasteMeasurement, user=RequireAdmin()):
+    from backend.app.services.home_material_accounting import record_waste, summary
+    try:
+        record_waste(settings.base_dir, run_id, body.waste_g, body.note, user.username)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return summary(settings.base_dir)
