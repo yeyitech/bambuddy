@@ -9720,7 +9720,6 @@ export function PrintersPage({ detail = false }: { detail?: boolean } = {}) {
           <h1 className="mt-3 text-2xl font-bold text-white">{sortedPrinters[0]?.name ?? '打印机详情'}</h1>
           <p className="mt-1 text-sm text-bambu-gray">实时状态、耗材与近期打印记录</p>
         </div>
-        {sortedPrinters[0] && <Button disabled={!hasPermission('camera:view')} onClick={() => document.getElementById('printer-live-camera')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><Video className="h-4 w-4" />查看实时画面</Button>}
       </div> : <div className="space-y-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
